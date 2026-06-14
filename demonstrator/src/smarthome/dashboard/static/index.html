@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smart-Home Demonstrator</title>
+<style>
+  :root{--bg:#0f1419;--panel:#1a222c;--panel2:#222d3a;--line:#2c3a4a;
+        --txt:#e6edf3;--dim:#8b98a5;--accent:#4aa3ff;--ok:#3fb950;--warn:#d29922;--bad:#f85149;}
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.4 system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--txt)}
+  header{display:flex;align-items:center;gap:14px;padding:12px 18px;background:var(--panel);
+         border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+  header h1{font-size:16px;margin:0;font-weight:600}
+  header .sub{color:var(--dim);font-size:12px}
+  .dot{width:9px;height:9px;border-radius:50%;display:inline-block;background:var(--bad)}
+  .dot.on{background:var(--ok)}
+  .wrap{display:grid;grid-template-columns:1fr 380px;gap:16px;padding:16px;align-items:start}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}
+  .card.off{opacity:.55}
+  .card .top{display:flex;justify-content:space-between;align-items:center;gap:6px}
+  .card .nm{font-weight:600}
+  .card .meta{color:var(--dim);font-size:11px;text-transform:capitalize}
+  .badge{font-size:10px;padding:1px 6px;border-radius:6px;background:var(--panel2);color:var(--dim);
+         border:1px solid var(--line)}
+  .badge.zigbee{color:#e3b341;border-color:#5a4a1a}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .chip{font-size:12px;padding:2px 8px;border-radius:6px;background:var(--panel2);border:1px solid var(--line)}
+  .chip.good{color:var(--ok)} .chip.bad{color:var(--bad)} .chip.hot{color:var(--warn)}
+  .col{display:flex;flex-direction:column;gap:16px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .panel h2{font-size:13px;margin:0;padding:10px 12px;background:var(--panel2);border-bottom:1px solid var(--line)}
+  .panel .body{padding:10px 12px;max-height:340px;overflow:auto}
+  .ask{display:flex;gap:8px;padding:10px 12px}
+  .ask input{flex:1;background:var(--bg);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:8px}
+  .ask button{background:var(--accent);border:0;border-radius:8px;color:#04101f;font-weight:600;padding:8px 14px;cursor:pointer}
+  .reply{padding:0 12px 10px;color:var(--dim);font-size:12px;min-height:16px}
+  .ev{font-size:12px;padding:5px 0;border-bottom:1px solid var(--line);display:flex;gap:8px}
+  .ev:last-child{border-bottom:0}
+  .ev .k{flex:0 0 64px;color:var(--dim);text-transform:uppercase;font-size:10px;padding-top:1px}
+  .ev .k.alert{color:var(--bad)} .ev .k.agent{color:var(--accent)} .ev .k.automation{color:var(--ok)}
+  .reg{font-size:12px;display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--line)}
+  .reg:last-child{border-bottom:0}
+  .reg .s.online{color:var(--ok)} .reg .s.offline{color:var(--bad)}
+  .empty{color:var(--dim);font-size:12px}
+  .nav{color:var(--accent);text-decoration:none;font-size:12px;border:1px solid var(--line);
+       padding:4px 10px;border-radius:8px}
+  .nav:hover{background:var(--panel2)}
+</style>
+</head>
+<body>
+<header>
+  <h1>🏠 Smart-Home Demonstrator</h1>
+  <span class="sub"><span id="conn" class="dot"></span> <span id="connTxt">connecting…</span></span>
+  <span class="sub">· <span id="count">0</span> devices</span>
+  <a class="nav" href="/benchmark" style="margin-left:auto">📊 Architecture benchmark</a>
+  <span class="sub">local-first · MQTT · on-device AI</span>
+</header>
+
+<div class="wrap">
+  <div>
+    <div id="devices" class="grid"></div>
+  </div>
+  <div class="col">
+    <div class="panel">
+      <h2>🤖 On-device agent</h2>
+      <form class="ask" id="askForm">
+        <input id="askInput" placeholder="e.g. good night · make it cozy · it's cold · status" autocomplete="off">
+        <button>Send</button>
+      </form>
+      <div class="reply" id="reply"></div>
+    </div>
+    <div class="panel">
+      <h2>📇 Device registry (source of truth)</h2>
+      <div class="body" id="registry"><div class="empty">waiting…</div></div>
+    </div>
+    <div class="panel">
+      <h2>📜 Event log</h2>
+      <div class="body" id="events"><div class="empty">waiting…</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const devices = {};
+let inventory = {devices: []};
+const elDevices = document.getElementById('devices');
+const elEvents  = document.getElementById('events');
+const elReg     = document.getElementById('registry');
+const elCount   = document.getElementById('count');
+
+function fmt(type, attrs){
+  const c=[]; const add=(t,cls='')=>c.push({t,cls});
+  if(type==='light'){ add(attrs.on?'on':'off', attrs.on?'good':''); add('☼ '+(attrs.brightness??0)+'%'); }
+  else if(type==='thermostat'){ add((attrs.temperature??'–')+'°', 'hot'); add('→ '+(attrs.setpoint??'–')+'°'); add(attrs.mode??''); }
+  else if(type==='motion_sensor'){ add(attrs.motion?'MOTION':'clear', attrs.motion?'bad':''); add((attrs.illuminance??'–')+' lux'); }
+  else if(type==='door_lock'){ add(attrs.locked?'locked':'UNLOCKED', attrs.locked?'good':'bad'); add('🔋'+(attrs.battery??'–')+'%'); }
+  else if(type==='smart_plug'){ add(attrs.on?'on':'off', attrs.on?'good':''); add((attrs.power_w??0)+' W', (attrs.power_w>2000?'bad':'')); }
+  else { for(const k in attrs) add(k+': '+attrs[k]); }
+  return c;
+}
+function renderDevices(){
+  const ids=Object.keys(devices).sort((a,b)=>(devices[a].area+devices[a].type).localeCompare(devices[b].area+devices[b].type));
+  elCount.textContent=ids.length;
+  elDevices.innerHTML = ids.map(id=>{
+    const d=devices[id], on=d.availability!=='offline';
+    const chips=fmt(d.type,d.attrs||{}).map(x=>`<span class="chip ${x.cls}">${x.t}</span>`).join('');
+    const proto=d.protocol==='zigbee'?'<span class="badge zigbee">zigbee</span>':`<span class="badge">${d.protocol||'matter'}</span>`;
+    return `<div class="card ${on?'':'off'}">
+      <div class="top"><span class="nm">${d.name||id}</span><span class="dot ${on?'on':''}"></span></div>
+      <div class="meta">${d.area} · ${d.type} ${proto}</div>
+      <div class="chips">${chips}</div></div>`;
+  }).join('') || '<div class="empty">no devices yet…</div>';
+}
+function renderRegistry(){
+  const ds=inventory.devices||[];
+  elReg.innerHTML = ds.length ? ds.map(d=>{
+    const seen=new Date(d.last_seen*1000).toLocaleTimeString();
+    return `<div class="reg"><span>${d.descriptor.name} <span class="empty">(${d.descriptor.type})</span></span>
+      <span><span class="s ${d.status}">${d.status}</span> <span class="empty">${seen}</span></span></div>`;
+  }).join('') : '<div class="empty">registry empty</div>';
+}
+function addEvent(ev){
+  if(elEvents.querySelector('.empty')) elEvents.innerHTML='';
+  const t=new Date((ev.ts||Date.now()/1000)*1000).toLocaleTimeString();
+  const div=document.createElement('div'); div.className='ev';
+  div.innerHTML=`<span class="k ${ev.kind}">${ev.kind}</span><span>${ev.message} <span class="empty">${t}</span></span>`;
+  elEvents.insertBefore(div, elEvents.firstChild);
+  while(elEvents.children.length>120) elEvents.removeChild(elEvents.lastChild);
+}
+
+document.getElementById('askForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const inp=document.getElementById('askInput'); const text=inp.value.trim(); if(!text) return;
+  inp.value='';
+  document.getElementById('reply').textContent='…thinking';
+  await fetch('/api/agent',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
+});
+
+function connect(){
+  const ws=new WebSocket(`ws://${location.host}/ws`);
+  const conn=document.getElementById('conn'), connTxt=document.getElementById('connTxt');
+  ws.onopen=()=>{conn.classList.add('on');connTxt.textContent='connected';};
+  ws.onclose=()=>{conn.classList.remove('on');connTxt.textContent='reconnecting…';setTimeout(connect,1000);};
+  ws.onmessage=ev=>{
+    const m=JSON.parse(ev.data);
+    if(m.type==='snapshot'){
+      for(const d of m.devices) devices[d.device_id]={...d, attrs:d.attrs||{}};
+      inventory=m.inventory||{devices:[]};
+      elEvents.innerHTML=''; (m.events||[]).slice().reverse().forEach(addEvent);
+      renderDevices(); renderRegistry();
+    } else if(m.type==='update'){
+      if(m.kind==='state'){ (devices[m.device_id]=devices[m.device_id]||{device_id:m.device_id,type:'?',area:'?'}).attrs=m.attrs; renderDevices(); }
+      else if(m.kind==='descriptor'){ devices[m.device_id]={...(devices[m.device_id]||{}),...m.descriptor, attrs:(devices[m.device_id]||{}).attrs||{}}; renderDevices(); }
+      else if(m.kind==='availability'){ (devices[m.device_id]=devices[m.device_id]||{device_id:m.device_id,attrs:{}}).availability=m.status; renderDevices(); }
+      else if(m.kind==='inventory'){ inventory=m.inventory; renderRegistry(); }
+      else if(m.kind==='event'){ addEvent(m.event); }
+      else if(m.kind==='audit'){ const a=m.audit;
+        document.getElementById('reply').textContent = (a.reply||'') + (a.actions&&a.actions.length?`  ·  ${a.actions.length} action(s) [${a.backend}]`:`  ·  no action [${a.backend}]`); }
+    }
+  };
+}
+connect();
+</script>
+</body>
+</html>

@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Architecture Benchmark — Smart-Home Demonstrator</title>
+<style>
+  :root{--bg:#0f1419;--panel:#1a222c;--panel2:#222d3a;--line:#2c3a4a;
+        --txt:#e6edf3;--dim:#8b98a5;--accent:#4aa3ff;}
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.4 system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--txt)}
+  header{display:flex;align-items:center;gap:14px;padding:12px 18px;background:var(--panel);
+         border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+  header h1{font-size:16px;margin:0;font-weight:600}
+  header .sub{color:var(--dim);font-size:12px}
+  .nav{color:var(--accent);text-decoration:none;font-size:12px;border:1px solid var(--line);
+       padding:4px 10px;border-radius:8px}
+  .nav:hover{background:var(--panel2)}
+  main{padding:16px;max-width:1100px;margin:0 auto}
+  .intro{color:var(--dim);font-size:13px;margin:0 0 14px}
+  .controls{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+            padding:14px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+  .controls .archs{display:flex;flex-wrap:wrap;gap:10px}
+  .chk{display:flex;align-items:center;gap:6px;font-size:13px;background:var(--panel2);
+       border:1px solid var(--line);border-radius:8px;padding:6px 10px;cursor:pointer}
+  .chk input{accent-color:var(--accent)}
+  .num{display:flex;align-items:center;gap:6px;color:var(--dim);font-size:12px}
+  .num input{width:64px;background:var(--bg);border:1px solid var(--line);
+       border-radius:6px;color:var(--txt);padding:5px}
+  .controls .sep{width:1px;align-self:stretch;background:var(--line)}
+  button{background:var(--accent);border:0;border-radius:8px;color:#04101f;font-weight:600;
+         padding:8px 16px;cursor:pointer}
+  button:disabled{opacity:.5;cursor:default}
+  .status{color:var(--dim);font-size:12px;min-height:16px;margin-bottom:10px}
+  #out:empty::after{content:"Run the benchmark to compare the architectures.";color:var(--dim);font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <h1>📊 Architecture Benchmark</h1>
+  <span class="sub">edge · cloud · hybrid — inference-location trade-offs</span>
+  <a class="nav" href="/" style="margin-left:auto">← Back to dashboard</a>
+</header>
+
+<main>
+  <p class="intro">
+    Pick which smart-home architectures to compare and size the simulated home
+    (<b>rooms</b> &amp; <b>devices</b>), then run a fixed suite of natural-language
+    requests through each one. The results — latency, action correctness, success
+    rate and robustness during a cloud outage — depend on the chosen architecture
+    (inference at the <b>edge</b>, in the <b>cloud</b>, or <b>hybrid</b> with local
+    fallback). The four rooms the suite addresses are always present, so
+    correctness stays comparable while latency grows with the home size.
+  </p>
+
+  <div class="controls">
+    <div class="archs" id="archs"></div>
+    <div class="sep"></div>
+    <label class="num" title="Total rooms (the 4 addressed by the suite are always included)">
+      🏠 rooms <input id="rooms" type="number" min="4" max="12" value="4"></label>
+    <label class="num" title="Total simulated devices in the home">
+      🔌 devices <input id="devices" type="number" min="10" max="40" value="10"></label>
+    <label class="num">seed <input id="seed" type="number" value="42"></label>
+    <button id="run">Run benchmark</button>
+  </div>
+
+  <div class="status" id="status"></div>
+  <div id="out"></div>
+</main>
+
+<script>
+const elArchs = document.getElementById('archs');
+const elStatus = document.getElementById('status');
+const elOut = document.getElementById('out');
+const btn = document.getElementById('run');
+
+async function loadArchs(){
+  try{
+    const r = await fetch('/api/benchmark/architectures');
+    const j = await r.json();
+    elArchs.innerHTML = j.architectures.map(a=>
+      `<label class="chk" title="${a.description.replace(/"/g,'&quot;')}">
+         <input type="checkbox" value="${a.key}" checked> ${a.label}
+       </label>`).join('');
+  }catch(e){ elStatus.textContent = 'Could not load architectures: '+e; }
+}
+
+function numVal(id, def){ const v = parseInt(document.getElementById(id).value,10); return Number.isFinite(v) ? v : def; }
+
+async function run(){
+  const keys = [...elArchs.querySelectorAll('input:checked')].map(i=>i.value);
+  if(!keys.length){ elStatus.textContent='Select at least one architecture.'; return; }
+  const seed = numVal('seed',42), rooms = numVal('rooms',4), devices = numVal('devices',10);
+  btn.disabled = true; elStatus.textContent = '…running suite';
+  try{
+    const r = await fetch('/api/benchmark/run',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({architectures:keys, seed, rooms, devices})});
+    const j = await r.json();
+    elOut.innerHTML = j.html;
+    const rep = j.report;
+    // Reflect the actual world size back (it may be clamped up to fit the rooms).
+    document.getElementById('rooms').value = rep.world_rooms;
+    document.getElementById('devices').value = rep.world_devices;
+    elStatus.textContent = `Done · ${rep.suite_size} prompts · `
+      + `${rep.world_devices} devices in ${rep.world_rooms} rooms · `
+      + rep.architectures.map(x=>x.profile.label).join(', ');
+  }catch(e){ elStatus.textContent = 'Run failed: '+e; }
+  finally{ btn.disabled = false; }
+}
+
+btn.addEventListener('click', run);
+loadArchs().then(run);
+</script>
+</body>
+</html>

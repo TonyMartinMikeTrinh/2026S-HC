@@ -1,0 +1,7 @@
+# Installs the demonstrator package together with all runtime dependencies.
+# The dependency list is the canonical one in pyproject.toml ([project.dependencies]).
+#
+#   pip install -r requirements.txt        # runtime only
+#   pip install -e ".[dev]"                # runtime + test tooling (pytest)
+#
+-e .
