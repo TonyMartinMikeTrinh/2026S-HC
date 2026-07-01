@@ -16,3 +16,15 @@ Abgaben zur Vorlesung "Heterogeneous Computing" im Sommer 2026.
   [`demonstrator/Ergebnisbericht.md`](demonstrator/Ergebnisbericht.md) für den Ergebnisbericht.
 
 Schnellstart: `cd demonstrator && pip install -e . && python run.py up` → http://127.0.0.1:8000
+
+## Übungsblatt 2 — SIMT & Speicherzugriff in OpenCL
+
+- **OpenCL-Lösung:** [`uebung2/`](uebung2/) — Aufgabe 1 (SIMT-Ausführungsmodell &
+  Warp-Divergenz) und Aufgabe 2 (Speicher: effektive Bandbreite über
+  coalesced/strided/gather-Zugriffsmuster und Latency-Hiding über die Occupancy),
+  umgesetzt mit OpenCL-C-Kernels und `pyopencl`-Host, gemessen auf einer Intel-GPU.
+  Terminologie nach Kaeli et al., *Heterogeneous Computing with OpenCL* (2011).
+  Siehe [`uebung2/README.md`](uebung2/README.md) zum Ausführen und
+  [`uebung2/Ergebnisbericht.md`](uebung2/Ergebnisbericht.md) für den Ergebnisbericht.
+
+Schnellstart: `cd uebung2 && pip install -r requirements.txt && python aufgabe1_simt_divergenz.py`

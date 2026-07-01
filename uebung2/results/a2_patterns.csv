@@ -1,0 +1,10 @@
+muster,stride,gbps,pct_of_peak
+coalesced (Stride 1),1,30.95,100.0
+strided (Stride 2),2,17.86,57.7
+strided (Stride 4),4,10.95,35.4
+strided (Stride 8),8,6.64,21.5
+strided (Stride 16),16,3.61,11.7
+strided (Stride 32),32,3.65,11.8
+strided (Stride 64),64,3.17,10.3
+strided (Stride 128),128,3.35,10.8
+random / gather,0,1.57,5.1
